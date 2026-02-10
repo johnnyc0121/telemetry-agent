@@ -1,0 +1,65 @@
+# docker config for influxDB and grafana
+services:
+  influxdb2:
+    image: influxdb:2
+    container_name: influxdb2
+    ports:
+      - 8086:8086
+    volumes:
+      - influxdb2-config:/etc/influxdb2
+      - influxdb2-data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    user: "0"
+    ports:
+      - 3000:3000
+    volumes:
+      - influxdb2-config:/etc/influxdb2
+      - grafana-data:/var/lib/grafana
+      - ./grafana/grafana-entrypoint.sh:/grafana-entrypoint.sh
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    entrypoint: ["/grafana-entrypoint.sh"]
+    environment:
+      - INFLUXDB_URL=${INFLUXDB_URL_DOCKER}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    depends_on:
+      influxdb2:
+        condition: service_healthy
+
+  telemetry-agent:
+    build: .
+    container_name: telemetry-agent
+    volumes:
+      - influxdb2-config:/etc/influxdb2
+    environment:
+      - TARGETS=${TARGETS}
+      - COLLECTION_INTERVAL=${COLLECTION_INTERVAL}
+      - GEOLOCATION_API_URL=${GEOLOCATION_API_URL}
+      - INFLUXDB_URL=${INFLUXDB_URL_DOCKER}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+    depends_on:
+      influxdb2:
+        condition: service_healthy
+
+volumes:
+  grafana-data:
+  influxdb2-data:
+  influxdb2-config:
